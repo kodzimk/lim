@@ -7,13 +7,23 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include<string.h>
+#include<assert.h>
+#include <inttypes.h>
+
+#define LIM_VALUE_MAX_COUNT 256
+#define LIM_EXPRESS_BLOCK_MAX_COUNT 256
+#define LIM_EXPRESS_MAX_COUNT 2
+
+typedef enum {
+	NONE = 0,
+	ADD,
+	MINUS,
+}Oper_Types;
 
 typedef enum {
 	ERR_INVALID_STRUCT_OF_LIM,
 	ERR_OKAY,
 }Err;
-
-#define LIM_VALUE_MAX_COUNT 256
 
 
 typedef struct  {
@@ -30,22 +40,67 @@ bool st_eq(String_t a, String_t b);
 String_t chop_by_delim(String_t *line, char delimmator);
 
 typedef struct {
-	int64_t value[LIM_VALUE_MAX_COUNT];
-	size_t values_size;
+	String_t value;
+	Oper_Types oper_type;
+}Block;
 
+typedef struct {
+	Block expr_block[LIM_EXPRESS_BLOCK_MAX_COUNT];
+	size_t block_count;
+}Express;
+
+typedef struct {
 	String_t var;
-	int64_t lim_var_value;
+	int64_t var_value;
+
+	Express expr[LIM_EXPRESS_MAX_COUNT];
+	size_t expr_size;
+
+	int64_t expr_value[LIM_EXPRESS_MAX_COUNT];
+	size_t value_size;
+
+	int64_t result;
+
 }Lim;
 
 Lim lim = { 0 };
 
-Err check_struct_of_lim(String_t *src,Lim* lim);
 void lim_translate_source(String_t src,Lim *lim);
+void set_expr_blocks(Lim *lim, String_t* expr_line);
+Err check_struct_of_lim(String_t* src, Lim* lim);
+Err lim_calculate_expressions(Lim* lim);
+int64_t lim_calc_expr(Express* expr, String_t var, int64_t var_value);
 
 #endif
 
 
 #ifndef LIM_IMPLEMENTATION
+
+int64_t lim_calc_expr(Express* expr,String_t var,int64_t var_value)
+{
+	int64_t value = 0;
+	for (size_t i = 0; i < expr->block_count; i++)
+	{
+		if (isdigit(*expr->expr_block[i].value.data)) {
+		    value += st_to_int(&expr->expr_block[i].value);
+		}
+		else if (st_eq(cstr_to_st(expr->expr_block[i].value.data),var)) {
+			value += var_value;
+		}
+	}
+	return value;
+}
+
+Err lim_calculate_expressions(Lim* lim)
+{
+	for (size_t i = 0; i < lim->expr_size; ++i)
+	{
+		lim->expr_value[lim->value_size++] = lim_calc_expr(&lim->expr[i], lim->var, lim->var_value);
+		lim->result += lim->expr_value[lim->value_size - 1];
+	}
+	
+	return ERR_OKAY;
+}
 
 int st_to_int(String_t *st)
 {
@@ -165,10 +220,21 @@ Err check_struct_of_lim(String_t *src,Lim *lim)
 	    lim->var = var;
 	}
 
-	lim->lim_var_value = (int64_t)st_to_int(&line);
-	printf("Value: %d\n", (int)lim->lim_var_value);
+	lim->var_value = (int64_t)st_to_int(&line);
     
 	return  ERR_OKAY;
+}
+
+void set_expr_blocks(Lim *lim,String_t *expr_line)
+{
+	size_t block_size = 0;
+	while (expr_line->count > 0) {
+		assert(lim->expr[lim->expr_size].block_count < LIM_EXPRESS_BLOCK_MAX_COUNT);
+		String_t block = st_trim(chop_by_delim(expr_line, '\n'));
+		lim->expr[lim->expr_size].expr_block[block_size++]= (Block){ .value = block,.oper_type = NONE };
+	}
+	lim->expr[lim->expr_size].block_count = block_size;
+	lim->expr_size += 1;
 }
 
 void lim_translate_source(String_t src, Lim* lim)
@@ -176,6 +242,12 @@ void lim_translate_source(String_t src, Lim* lim)
 	if (check_struct_of_lim(&src,lim) != ERR_OKAY) {
 		fprintf(stderr, "ERR: PROBLEM WITH STRUCT OF LIM\n");
 		exit(1);
+	}
+
+	while (src.count > 0) {
+		assert(lim->expr_size < LIM_EXPRESS_MAX_COUNT);
+		String_t expr_line = st_trim(chop_by_delim(&src, '('));
+		set_expr_blocks(lim, &expr_line);
 	}
 }
 

@@ -11,6 +11,7 @@ lim
 *.userosscache
 *.sln.docstates
 *.vcxproj* 
+*.sln
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
