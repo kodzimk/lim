@@ -31,12 +31,13 @@ typedef struct  {
 	size_t count;
 }String_t;
 
+bool st_eq(String_t a, String_t b);
+bool is_number(String_t st);
 int st_to_int(String_t *st);
 String_t cstr_to_st(const char* cstr);
 String_t st_trim_left(String_t line);
 String_t st_trim_right(String_t line);
 String_t st_trim(String_t line);
-bool st_eq(String_t a, String_t b);
 String_t chop_by_delim(String_t *line, char delimmator);
 
 typedef struct {
@@ -60,11 +61,11 @@ typedef struct {
 	size_t value_size;
 
 	int64_t result;
-
 }Lim;
 
 Lim lim = { 0 };
 
+void print_expr(Lim* lim, int index);
 void lim_translate_source(String_t src,Lim *lim);
 void set_expr_blocks(Lim *lim, String_t* expr_line);
 Err check_struct_of_lim(String_t* src, Lim* lim);
@@ -76,16 +77,55 @@ int64_t lim_calc_expr(Express* expr, String_t var, int64_t var_value);
 
 #ifndef LIM_IMPLEMENTATION
 
+bool is_number(String_t st)
+{
+	for (size_t i = 0; i < st.count; i++)
+	{
+		if (!isdigit(st.data[i]))
+		{ return false; }
+	}
+
+	return true;
+}
+
+void print_expr(Lim* lim,int index)
+{
+		for (size_t i = 0; i < lim->expr[index].block_count; ++i)
+		{
+			printf("Index: %d  Value: ", (int)i);
+			for (size_t j = 0; j < lim->expr[index].expr_block[i].value.count; j++)
+			{
+				printf("%c", lim->expr[index].expr_block[i].value.data[j]);
+			}
+		    printf("\n");
+		}
+}
+
 int64_t lim_calc_expr(Express* expr,String_t var,int64_t var_value)
 {
 	int64_t value = 0;
 	for (size_t i = 0; i < expr->block_count; i++)
 	{
-		if (isdigit(*expr->expr_block[i].value.data)) {
-		    value += st_to_int(&expr->expr_block[i].value);
+		int64_t temp = 0;
+		if (st_eq(expr->expr_block[i].value, var)) {
+			printf("VAR\n");
+			temp = var_value;
 		}
-		else if (st_eq(cstr_to_st(expr->expr_block[i].value.data),var)) {
-			value += var_value;
+		else if (is_number(expr->expr_block[i].value)) {
+			printf("DIGIT\n");
+		    temp += st_to_int(&expr->expr_block[i].value);
+		}
+
+		if (i != 0) {
+			if (expr->expr_block[i].oper_type == ADD) {
+				value += temp;
+			}
+			else if (expr->expr_block[i].oper_type == MINUS) {
+				value -= temp;
+			}
+		}
+		else {
+			value += temp;
 		}
 	}
 	return value;
@@ -197,7 +237,6 @@ String_t chop_by_delim(String_t *st, char delimmator)
 	return result;
 }
 
-
 Err check_struct_of_lim(String_t *src,Lim *lim)
 {
 	String_t line = st_trim_left(chop_by_delim(src, ':'));
@@ -229,9 +268,21 @@ void set_expr_blocks(Lim *lim,String_t *expr_line)
 {
 	size_t block_size = 0;
 	while (expr_line->count > 0) {
-		assert(lim->expr[lim->expr_size].block_count < LIM_EXPRESS_BLOCK_MAX_COUNT);
-		String_t block = st_trim(chop_by_delim(expr_line, '\n'));
-		lim->expr[lim->expr_size].expr_block[block_size++]= (Block){ .value = block,.oper_type = NONE };
+		String_t block = chop_by_delim(expr_line, ' ');
+		lim->expr[lim->expr_size].expr_block[block_size]= (Block){ .value = block,.oper_type = NONE };     
+
+		if (*expr_line->data == '+') {
+			lim->expr[lim->expr_size].expr_block[block_size].oper_type = ADD;
+			expr_line->data += 1;
+			expr_line->count -= 1;
+		}
+		else if (*expr_line->data == '-') {
+			lim->expr[lim->expr_size].expr_block[block_size].oper_type = MINUS;
+			expr_line->data += 1;
+			expr_line->count -= 1;
+		}
+		*expr_line = st_trim(*expr_line);
+		block_size += 1;
 	}
 	lim->expr[lim->expr_size].block_count = block_size;
 	lim->expr_size += 1;
@@ -248,6 +299,7 @@ void lim_translate_source(String_t src, Lim* lim)
 		assert(lim->expr_size < LIM_EXPRESS_MAX_COUNT);
 		String_t expr_line = st_trim(chop_by_delim(&src, '('));
 		set_expr_blocks(lim, &expr_line);
+		print_expr(lim,lim->expr_size - 1);
 	}
 }
 
