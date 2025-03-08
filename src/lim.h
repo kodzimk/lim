@@ -52,7 +52,7 @@ typedef struct {
 }Expr;
 
 
- struct NodeExpr{
+struct NodeExpr {
 	NodeExpr* next;
 	Expr expr;
 };
@@ -73,12 +73,12 @@ typedef struct {
 Lim lim = { 0 };
 
 void lim_translate_source(String_t src, Lim* lim);
-void set_expr_blocks(Lim* lim, String_t* expr_line);
+void set_expr_blocks(Lim* lim, String_t* expr_line,NodeExpr *up_expr);
 Err check_struct_of_lim(String_t* src, Lim* lim);
 Err lim_calculate_expressions(Lim* lim);
 Err free_node_expr(NodeExpr* expr);
-NodeExpr* lim_calculate_level_two(NodeExpr* exp,Lim *lim);
-NodeExpr* lim_calculate_level_three(NodeExpr* exp,Lim *lim);
+NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim);
+NodeExpr* lim_calculate_level_three(NodeExpr* exp, Lim* lim);
 
 #endif
 
@@ -132,11 +132,11 @@ Err free_node_expr(NodeExpr* expr)
 	return ERR_OKAY;
 }
 
-NodeExpr* lim_calculate_level_three(NodeExpr* exp,Lim *lim) {
+NodeExpr* lim_calculate_level_three(NodeExpr* exp, Lim* lim) {
 	return NULL;
 }
 
-NodeExpr* lim_calculate_level_two(NodeExpr* exp,Lim *lim) {
+NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim) {
 	while (exp->expr.type != NONE && level_of_oper(exp->expr.type) == 2) {
 		if (level_of_oper(exp->next->expr.type) > 2) {
 			NodeExpr* tmp = exp;
@@ -161,7 +161,7 @@ NodeExpr* lim_calculate_level_two(NodeExpr* exp,Lim *lim) {
 	return exp;
 }
 
-Err lim_calculate_expressions(Lim *lim)
+Err lim_calculate_expressions(Lim* lim)
 {
 	NodeExpr* temp = lim->up_expr;
 	while (temp->expr.type != NONE) {
@@ -336,11 +336,9 @@ Err check_struct_of_lim(String_t* src, Lim* lim)
 	return  ERR_OKAY;
 }
 
-void set_expr_blocks(Lim* lim, String_t* expr_line)
+void set_expr_blocks(Lim* lim, String_t* expr_line,NodeExpr *up_expr)
 {
-	NodeExpr* up_expr = (NodeExpr*)malloc(sizeof(NodeExpr));
 	NodeExpr* temp = up_expr;
-
 	while (expr_line->count > 0) {
 		String_t block = chop_by_delim(expr_line, ' ');
 		temp->expr = (Expr){ .value = 0,.type = NONE };
@@ -353,7 +351,7 @@ void set_expr_blocks(Lim* lim, String_t* expr_line)
 		}
 
 		if (*expr_line->data == '+') {
-			temp->expr.type = ADD ;
+			temp->expr.type = ADD;
 			expr_line->data += 1;
 			expr_line->count -= 1;
 		}
@@ -372,13 +370,12 @@ void set_expr_blocks(Lim* lim, String_t* expr_line)
 			expr_line->data += 1;
 			expr_line->count -= 1;
 		}
-		
+
 		*expr_line = st_trim(*expr_line);
 		temp->next = (NodeExpr*)malloc(sizeof(NodeExpr));
 		temp = temp->next;
 	}
 
-	lim->up_expr = up_expr;
 }
 
 void lim_translate_source(String_t src, Lim* lim)
@@ -388,9 +385,11 @@ void lim_translate_source(String_t src, Lim* lim)
 		exit(1);
 	}
 
+	NodeExpr* up_expr = (NodeExpr*)malloc(sizeof(NodeExpr));
 	while (src.count > 0) {
-		String_t expr_line = st_trim(chop_by_delim(&src, '('));
-		set_expr_blocks(lim, &expr_line);
+		String_t expr_line = st_trim(chop_by_delim(&src, '\n'));
+		set_expr_blocks(lim, &expr_line,up_expr);
+		lim->up_expr = up_expr;
 	}
 }
 
