@@ -18,6 +18,8 @@ typedef enum {
 	NONE = 0,
 	ADD,
 	MINUS,
+	MULT,
+	DIV,
 }Oper_Types;
 
 typedef enum {
@@ -33,7 +35,7 @@ typedef struct {
 
 bool st_eq(String_t a, String_t b);
 bool is_number(String_t st);
-int st_to_int(String_t* st);
+int st_to_int(String_t st);
 int level_of_oper(Oper_Types type);
 String_t int_to_st(int64_t number);
 String_t cstr_to_st(const char* cstr);
@@ -45,7 +47,7 @@ String_t chop_by_delim(String_t* line, char delimmator);
 typedef struct NodeExpr NodeExpr;
 
 typedef struct {
-	String_t value;
+	int64_t value;
 	Oper_Types type;
 }Expr;
 
@@ -75,6 +77,8 @@ void set_expr_blocks(Lim* lim, String_t* expr_line);
 Err check_struct_of_lim(String_t* src, Lim* lim);
 Err lim_calculate_expressions(Lim* lim);
 Err free_node_expr(NodeExpr* expr);
+NodeExpr* lim_calculate_level_two(NodeExpr* exp,Lim *lim);
+NodeExpr* lim_calculate_level_three(NodeExpr* exp,Lim *lim);
 
 #endif
 
@@ -109,6 +113,8 @@ int level_of_oper(Oper_Types type)
 	case NONE: return -1;
 	case ADD: return 1;
 	case MINUS:return 1;
+	case MULT: return 2;
+	case DIV:return 2;
 	}
 	return -1;
 }
@@ -126,65 +132,91 @@ Err free_node_expr(NodeExpr* expr)
 	return ERR_OKAY;
 }
 
-Err lim_calculate_expressions(Lim* lim)
-{
-	NodeExpr* temp = lim->up_expr;
-	while (temp->expr.type != NONE) {
-		if (temp->next != NULL && level_of_oper(temp->next->expr.type) < 2) {
-			Expr expr = temp->expr;
-			temp = temp->next;
+NodeExpr* lim_calculate_level_three(NodeExpr* exp,Lim *lim) {
+	return NULL;
+}
 
-			int64_t value = 0;
-			if (is_number(expr.value)) {
-				value = st_to_int(&expr.value);
-			}
-			else {
-				value = lim->var_value;
-			}
+NodeExpr* lim_calculate_level_two(NodeExpr* exp,Lim *lim) {
+	while (exp->expr.type != NONE && level_of_oper(exp->expr.type) == 2) {
+		if (level_of_oper(exp->next->expr.type) > 2) {
+			NodeExpr* tmp = exp;
+			tmp->next = lim_calculate_level_three(exp, lim);
+			exp = tmp;
+		}
+		else {
+			Expr expr = exp->expr;
+			exp = exp->next;
 
-			int64_t cur_value = 0;
-			if (is_number(temp->expr.value)) {
-				cur_value = st_to_int(&temp->expr.value);
+			if (expr.type == MULT) {
+				expr.value *= exp->expr.value;
 			}
-			else {
-				cur_value = lim->var_value;
+			else if (expr.type == DIV) {
+				expr.value /= exp->expr.value;
 			}
 
-			if (expr.type == ADD) {
-				value += cur_value;
-			}
-			else if (expr.type == MINUS) {
-				value -= cur_value;
-			}
-
-			temp->expr.value = int_to_st(value);
-
-			printf("VALUE: %" PRId64 "\n", value);
+			exp->expr.value = expr.value;
 		}
 	}
 
-	lim->result = st_to_int(&temp->expr.value);
+	return exp;
+}
+
+Err lim_calculate_expressions(Lim *lim)
+{
+	NodeExpr* temp = lim->up_expr;
+	while (temp->expr.type != NONE) {
+		if (level_of_oper(temp->next->expr.type) == 2) {
+			NodeExpr* tmp = temp;
+			tmp->next = lim_calculate_level_two(temp->next, lim);
+			temp = tmp;
+
+			printf("VALUE: %" PRId64 "\n", tmp->next->expr.value);
+		}
+		else if (level_of_oper(temp->expr.type) == 2) {
+			NodeExpr* tmp = temp;
+			tmp = lim_calculate_level_two(temp, lim);
+			temp = tmp;
+
+			printf("VALUE: %" PRId64 "\n", tmp->next->expr.value);
+		}
+
+		if (level_of_oper(temp->next->expr.type) < 2) {
+			Expr expr = temp->expr;
+			temp = temp->next;
+
+			if (expr.type == ADD) {
+				expr.value += temp->expr.value;
+			}
+			else if (expr.type == MINUS) {
+				expr.value -= temp->expr.value;
+			}
+
+			temp->expr.value = expr.value;
+		}
+	}
+
+	lim->result = temp->expr.value;
 
 	return ERR_OKAY;
 }
 
-int st_to_int(String_t* st)
+int st_to_int(String_t st)
 {
 
 	int sum = 0;
 	bool isMinus = false;
-	if (*st->data == '-') {
+	if (*st.data == '-') {
 		isMinus = true;
-		st->data += 1;
-		st->count -= 1;
+		st.data += 1;
+		st.count -= 1;
 	}
 
-	if (!isdigit(*st->data))
+	if (!isdigit(*st.data))
 		return -1;
 
-	for (size_t i = 0; i < st->count && isdigit(st->data[i]); ++i)
+	for (size_t i = 0; i < st.count && isdigit(st.data[i]); ++i)
 	{
-		sum = sum * 10 + st->data[i] - '0';
+		sum = sum * 10 + st.data[i] - '0';
 	}
 
 	if (isMinus)
@@ -203,6 +235,9 @@ String_t int_to_st(int64_t number)
 		size++;
 	}
 
+	if (number == 0)
+		size = 1;
+
 	char num[100];
 	for (size_t i = 0; i < size; i++)
 	{
@@ -218,7 +253,6 @@ String_t cstr_to_st(const char* cstr)
 {
 	return (String_t) { .count = strlen(cstr), .data = cstr };
 }
-
 
 String_t st_trim_left(String_t st)
 {
@@ -297,7 +331,7 @@ Err check_struct_of_lim(String_t* src, Lim* lim)
 		lim->var = var;
 	}
 
-	lim->var_value = (int64_t)st_to_int(&line);
+	lim->var_value = (int64_t)st_to_int(line);
 
 	return  ERR_OKAY;
 }
@@ -309,7 +343,14 @@ void set_expr_blocks(Lim* lim, String_t* expr_line)
 
 	while (expr_line->count > 0) {
 		String_t block = chop_by_delim(expr_line, ' ');
-		temp->expr = (Expr){ .value = block,.type = NONE };
+		temp->expr = (Expr){ .value = 0,.type = NONE };
+
+		if (is_number(block)) {
+			temp->expr.value = st_to_int(block);
+		}
+		else {
+			temp->expr.value = lim->var_value;
+		}
 
 		if (*expr_line->data == '+') {
 			temp->expr.type = ADD ;
@@ -318,6 +359,16 @@ void set_expr_blocks(Lim* lim, String_t* expr_line)
 		}
 		else if (*expr_line->data == '-') {
 			temp->expr.type = MINUS;
+			expr_line->data += 1;
+			expr_line->count -= 1;
+		}
+		else if (*expr_line->data == '*') {
+			temp->expr.type = MULT;
+			expr_line->data += 1;
+			expr_line->count -= 1;
+		}
+		else if (*expr_line->data == '/') {
+			temp->expr.type = DIV;
 			expr_line->data += 1;
 			expr_line->count -= 1;
 		}

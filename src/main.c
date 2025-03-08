@@ -1,7 +1,10 @@
 #include"lim.h"
 #define LIM_IMPLEMENTATION
 
-const char* limE = "lim n->5: n + 1 - 2 - 2";
+#include<stdio.h>
+#include<stdint.h>
+
+const char* limE = "lim n->5: n * 2 + 1 - 2 + 2 * 2 / 4";
 
 int main()
 {

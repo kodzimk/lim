@@ -1,4 +1,4 @@
-CFLAGS = -Wall 
+CFLAGS = -Wall -std=c11
 LIBS = 
 
 .PHONY: all
