@@ -4,7 +4,7 @@
 #include<stdio.h>
 #include<stdint.h>
 
-const char* limE = "lim n->5: n * 2 - 3 / 10 | 4 / 2 * 4 + 2";
+const char* limE = "lim n->5: 10 + 2 - 2 - 2^2 | 2 * 2^2";
 
 int main()
 {

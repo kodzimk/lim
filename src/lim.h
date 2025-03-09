@@ -5,6 +5,7 @@
 #include<stdbool.h>
 #include<stdio.h>
 #include<stdlib.h>
+#include<math.h>
 #include <ctype.h>
 #include<string.h>
 #include<assert.h>
@@ -34,7 +35,7 @@ typedef struct {
 
 bool st_eq(String_t a, String_t b);
 bool is_number(String_t st);
-int st_to_int(String_t st);
+double st_to_double(String_t st);
 int level_of_oper(Oper_Types type);
 String_t int_to_st(int64_t number);
 String_t cstr_to_st(const char* cstr);
@@ -48,6 +49,7 @@ typedef struct NodeExpr NodeExpr;
 typedef struct {
 	double value;
 	Oper_Types type;
+	double pow;
 	bool has_open_breaks;
 	bool has_close_breaks;
 }Expr;
@@ -198,7 +200,7 @@ NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim) {
 	return exp;
 }
 
-double lim_calculate_expressions(Lim* lim,NodeExpr* expr)
+double lim_calculate_expressions(Lim* lim, NodeExpr* expr)
 {
 	NodeExpr* temp = expr;
 	while (temp->expr.type != NONE) {
@@ -216,8 +218,7 @@ double lim_calculate_expressions(Lim* lim,NodeExpr* expr)
 
 			continue;
 		}
-
-		if (level_of_oper(temp->next->expr.type) < 2) {
+		else {
 			Expr expr = temp->expr;
 			temp = temp->next;
 
@@ -235,10 +236,10 @@ double lim_calculate_expressions(Lim* lim,NodeExpr* expr)
 	return temp->expr.value;
 }
 
-int st_to_int(String_t st)
+double st_to_double(String_t st)
 {
 
-	int sum = 0;
+	double sum = 0;
 	bool isMinus = false;
 	if (*st.data == '-') {
 		isMinus = true;
@@ -366,19 +367,35 @@ Err check_struct_of_lim(String_t* src, Lim* lim)
 		lim->var = var;
 	}
 
-	lim->var_value = (int64_t)st_to_int(line);
+	lim->var_value = st_to_double(line);
 
 	return  ERR_OKAY;
 }
 
-void lim_expr(Lim* lim, String_t *expr,NodeExpr* temp) {
-	temp->expr = (Expr){ .value = 0,.type = NONE ,.has_close_breaks = false,.has_open_breaks = false };
+void dump_list(NodeExpr* expr) {
+	NodeExpr* temp = expr;
+	while (temp->expr.type != NONE) {
+		printf("Value: %f  Type: %d\n", temp->expr.value, level_of_oper(temp->expr.type));
+		temp = temp->next;
+	}
+}
 
-	if (is_number(*expr)) {
-		temp->expr.value = st_to_int(*expr);
+void lim_expr(Lim* lim, String_t* expr, NodeExpr* temp) {
+	temp->expr = (Expr){ .value = 0,.type = NONE ,.has_close_breaks = false,.has_open_breaks = false, .pow = 1 };
+	String_t value = st_trim(chop_by_delim(expr, '^'));
+
+	if (is_number(value)) {
+		temp->expr.value = st_to_double(value);
 	}
 	else {
 		temp->expr.value = lim->var_value;
+	}
+
+	if (expr->count > 0) {
+		temp->expr.pow = st_to_double(*expr);
+		temp->expr.value = pow(temp->expr.value, temp->expr.pow);
+		expr->data += 1;
+		expr->count -= 1;
 	}
 }
 
@@ -401,13 +418,7 @@ void lim_translate_source(String_t src, Lim* lim)
 		String_t expr_line = st_trim(chop_by_delim(&up_src, ' '));
 
 		lim_expr(lim, &expr_line, temp);
-
-		if (*expr_line.data == '(') {
-			temp->expr.has_open_breaks = true;
-		}
-		else if (*(expr_line.data + 1) == ')') {
-			temp->expr.has_close_breaks = true;
-		}
+		up_src = st_trim(up_src);
 
 		if (*up_src.data == '+') {
 			temp->expr.type = ADD;
@@ -442,13 +453,7 @@ void lim_translate_source(String_t src, Lim* lim)
 		String_t expr_line = st_trim(chop_by_delim(&up_src, ' '));
 
 		lim_expr(lim, &expr_line, temp);
-
-		if (*expr_line.data == '(') {
-			temp->expr.has_open_breaks = true;
-		}
-		else if (*(expr_line.data + 1) == ')') {
-			temp->expr.has_close_breaks = true;
-		}
+		up_src = st_trim(up_src);
 
 		if (*up_src.data == '+') {
 			temp->expr.type = ADD;
