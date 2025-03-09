@@ -15,6 +15,8 @@ git clone (link of project)
 make 
 ```
 
+and write #define LIM_IMPLEMENTATION in using file
+
 ## Usage example
 ```sh
 lim n-> 0 : n + 1
