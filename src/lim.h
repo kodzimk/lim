@@ -8,7 +8,6 @@
 #include <ctype.h>
 #include<string.h>
 #include<assert.h>
-#include <inttypes.h>
 
 #define LIM_VALUE_MAX_COUNT 256
 #define LIM_EXPRESS_BLOCK_MAX_COUNT 25
@@ -47,8 +46,10 @@ String_t chop_by_delim(String_t* line, char delimmator);
 typedef struct NodeExpr NodeExpr;
 
 typedef struct {
-	int64_t value;
+	double value;
 	Oper_Types type;
+	bool has_open_breaks;
+	bool has_close_breaks;
 }Expr;
 
 
@@ -59,23 +60,21 @@ struct NodeExpr {
 
 typedef struct {
 	String_t var;
-	int64_t var_value;
-
-	int64_t expr_value[LIM_EXPRESS_MAX_COUNT];
-	size_t value_size;
+	double var_value;
 
 	NodeExpr* up_expr;
 	NodeExpr* under_expr;
 
-	int64_t result;
+	double up_result;
+	double down_result;
 }Lim;
 
 Lim lim = { 0 };
 
 void lim_translate_source(String_t src, Lim* lim);
-void set_expr_blocks(Lim* lim, String_t* expr_line,NodeExpr *up_expr);
+void lim_expr(Lim* lim, String_t* expr, NodeExpr* temp);
 Err check_struct_of_lim(String_t* src, Lim* lim);
-Err lim_calculate_expressions(Lim* lim);
+double lim_calculate_expressions(Lim* lim, NodeExpr* expr);
 Err free_node_expr(NodeExpr* expr);
 NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim);
 NodeExpr* lim_calculate_level_three(NodeExpr* exp, Lim* lim);
@@ -133,51 +132,28 @@ Err free_node_expr(NodeExpr* expr)
 }
 
 NodeExpr* lim_calculate_level_three(NodeExpr* exp, Lim* lim) {
-	return NULL;
-}
-
-NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim) {
-	while (exp->expr.type != NONE && level_of_oper(exp->expr.type) == 2) {
-		if (level_of_oper(exp->next->expr.type) > 2) {
-			NodeExpr* tmp = exp;
-			tmp->next = lim_calculate_level_three(exp, lim);
-			exp = tmp;
+	NodeExpr* temp = exp;
+	while (temp->expr.type != NONE && temp->expr.has_close_breaks != true) {
+		if (temp->expr.has_open_breaks == true) {
+			NodeExpr* tmp = temp;
+			tmp = lim_calculate_level_three(temp, lim);
+			temp = tmp;
 		}
-		else {
-			Expr expr = exp->expr;
-			exp = exp->next;
-
-			if (expr.type == MULT) {
-				expr.value *= exp->expr.value;
-			}
-			else if (expr.type == DIV) {
-				expr.value /= exp->expr.value;
-			}
-
-			exp->expr.value = expr.value;
+		if (temp->next->expr.has_open_breaks == true) {
+			NodeExpr* tmp = temp;
+			tmp->next = lim_calculate_level_three(temp->next, lim);
+			temp = tmp;
 		}
-	}
 
-	return exp;
-}
-
-Err lim_calculate_expressions(Lim* lim)
-{
-	NodeExpr* temp = lim->up_expr;
-	while (temp->expr.type != NONE) {
 		if (level_of_oper(temp->next->expr.type) == 2) {
 			NodeExpr* tmp = temp;
 			tmp->next = lim_calculate_level_two(temp->next, lim);
 			temp = tmp;
-
-			printf("VALUE: %" PRId64 "\n", tmp->next->expr.value);
 		}
 		else if (level_of_oper(temp->expr.type) == 2) {
 			NodeExpr* tmp = temp;
 			tmp = lim_calculate_level_two(temp, lim);
 			temp = tmp;
-
-			printf("VALUE: %" PRId64 "\n", tmp->next->expr.value);
 		}
 
 		if (level_of_oper(temp->next->expr.type) < 2) {
@@ -195,9 +171,68 @@ Err lim_calculate_expressions(Lim* lim)
 		}
 	}
 
-	lim->result = temp->expr.value;
+	return temp;
+}
 
-	return ERR_OKAY;
+NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim) {
+	while (level_of_oper(exp->expr.type) >= 2) {
+		if (level_of_oper(exp->next->expr.type) > 2) {
+			NodeExpr* tmp = exp;
+			tmp->next = lim_calculate_level_three(exp, lim);
+			exp = tmp;
+		}
+		else {
+			Expr expr = exp->expr;
+			exp = exp->next;
+
+			if (expr.type == MULT) {
+				expr.value *= exp->expr.value;
+			}
+			else if (expr.type == DIV) {
+				expr.value /= exp->expr.value;
+			}
+			exp->expr.value = expr.value;
+		}
+	}
+
+	return exp;
+}
+
+double lim_calculate_expressions(Lim* lim,NodeExpr* expr)
+{
+	NodeExpr* temp = expr;
+	while (temp->expr.type != NONE) {
+		if (level_of_oper(temp->expr.type) == 2) {
+			NodeExpr* tmp = temp;
+			tmp = lim_calculate_level_two(temp, lim);
+			temp = tmp;
+
+			continue;
+		}
+		else if (level_of_oper(temp->next->expr.type) == 2) {
+			NodeExpr* tmp = temp;
+			tmp->next = lim_calculate_level_two(temp->next, lim);
+			temp = tmp;
+
+			continue;
+		}
+
+		if (level_of_oper(temp->next->expr.type) < 2) {
+			Expr expr = temp->expr;
+			temp = temp->next;
+
+			if (expr.type == ADD) {
+				expr.value += temp->expr.value;
+			}
+			else if (expr.type == MINUS) {
+				expr.value -= temp->expr.value;
+			}
+			temp->expr.value = expr.value;
+		}
+	}
+
+	printf("TEMP: %f\n", temp->expr.value);
+	return temp->expr.value;
 }
 
 int st_to_int(String_t st)
@@ -336,46 +371,15 @@ Err check_struct_of_lim(String_t* src, Lim* lim)
 	return  ERR_OKAY;
 }
 
-void set_expr_blocks(Lim* lim, String_t* expr_line,NodeExpr *up_expr)
-{
-	NodeExpr* temp = up_expr;
-	while (expr_line->count > 0) {
-		String_t block = chop_by_delim(expr_line, ' ');
-		temp->expr = (Expr){ .value = 0,.type = NONE };
+void lim_expr(Lim* lim, String_t *expr,NodeExpr* temp) {
+	temp->expr = (Expr){ .value = 0,.type = NONE ,.has_close_breaks = false,.has_open_breaks = false };
 
-		if (is_number(block)) {
-			temp->expr.value = st_to_int(block);
-		}
-		else {
-			temp->expr.value = lim->var_value;
-		}
-
-		if (*expr_line->data == '+') {
-			temp->expr.type = ADD;
-			expr_line->data += 1;
-			expr_line->count -= 1;
-		}
-		else if (*expr_line->data == '-') {
-			temp->expr.type = MINUS;
-			expr_line->data += 1;
-			expr_line->count -= 1;
-		}
-		else if (*expr_line->data == '*') {
-			temp->expr.type = MULT;
-			expr_line->data += 1;
-			expr_line->count -= 1;
-		}
-		else if (*expr_line->data == '/') {
-			temp->expr.type = DIV;
-			expr_line->data += 1;
-			expr_line->count -= 1;
-		}
-
-		*expr_line = st_trim(*expr_line);
-		temp->next = (NodeExpr*)malloc(sizeof(NodeExpr));
-		temp = temp->next;
+	if (is_number(*expr)) {
+		temp->expr.value = st_to_int(*expr);
 	}
-
+	else {
+		temp->expr.value = lim->var_value;
+	}
 }
 
 void lim_translate_source(String_t src, Lim* lim)
@@ -385,12 +389,96 @@ void lim_translate_source(String_t src, Lim* lim)
 		exit(1);
 	}
 
+	src = st_trim(src);
+
 	NodeExpr* up_expr = (NodeExpr*)malloc(sizeof(NodeExpr));
-	while (src.count > 0) {
-		String_t expr_line = st_trim(chop_by_delim(&src, '\n'));
-		set_expr_blocks(lim, &expr_line,up_expr);
-		lim->up_expr = up_expr;
+	NodeExpr* under_expr = (NodeExpr*)malloc(sizeof(NodeExpr));
+	NodeExpr* temp = up_expr;
+
+	String_t up_src = st_trim(chop_by_delim(&src, '|'));
+
+	while (up_src.count > 0) {
+		String_t expr_line = st_trim(chop_by_delim(&up_src, ' '));
+
+		lim_expr(lim, &expr_line, temp);
+
+		if (*expr_line.data == '(') {
+			temp->expr.has_open_breaks = true;
+		}
+		else if (*(expr_line.data + 1) == ')') {
+			temp->expr.has_close_breaks = true;
+		}
+
+		if (*up_src.data == '+') {
+			temp->expr.type = ADD;
+			up_src.data += 1;
+			up_src.count -= 1;
+		}
+		else if (*up_src.data == '-') {
+			temp->expr.type = MINUS;
+			up_src.data += 1;
+			up_src.count -= 1;
+		}
+		else if (*up_src.data == '*') {
+			temp->expr.type = MULT;
+			up_src.data += 1;
+			up_src.count -= 1;
+		}
+		else if (*up_src.data == '/') {
+			temp->expr.type = DIV;
+			up_src.data += 1;
+			up_src.count -= 1;
+		}
+
+		up_src = st_trim(up_src);
+
+		temp->next = (NodeExpr*)malloc(sizeof(NodeExpr));
+		temp = temp->next;
 	}
+
+	temp = under_expr;
+	up_src = st_trim(src);
+	while (up_src.count > 0) {
+		String_t expr_line = st_trim(chop_by_delim(&up_src, ' '));
+
+		lim_expr(lim, &expr_line, temp);
+
+		if (*expr_line.data == '(') {
+			temp->expr.has_open_breaks = true;
+		}
+		else if (*(expr_line.data + 1) == ')') {
+			temp->expr.has_close_breaks = true;
+		}
+
+		if (*up_src.data == '+') {
+			temp->expr.type = ADD;
+			up_src.data += 1;
+			up_src.count -= 1;
+		}
+		else if (*up_src.data == '-') {
+			temp->expr.type = MINUS;
+			up_src.data += 1;
+			up_src.count -= 1;
+		}
+		else if (*up_src.data == '*') {
+			temp->expr.type = MULT;
+			up_src.data += 1;
+			up_src.count -= 1;
+		}
+		else if (*up_src.data == '/') {
+			temp->expr.type = DIV;
+			up_src.data += 1;
+			up_src.count -= 1;
+		}
+
+		up_src = st_trim(up_src);
+
+		temp->next = (NodeExpr*)malloc(sizeof(NodeExpr));
+		temp = temp->next;
+	}
+
+	lim->under_expr = under_expr;
+	lim->up_expr = up_expr;
 }
 
 
