@@ -1,4 +1,4 @@
-#ifndef LIM_H
+﻿#ifndef LIM_H
 #define LIM_H
 
 #include<stdint.h>
@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include<string.h>
 #include<assert.h>
+#include<limits.h>
 
 #define LIM_VALUE_MAX_COUNT 256
 #define LIM_EXPRESS_BLOCK_MAX_COUNT 25
@@ -69,6 +70,11 @@ typedef struct {
 
 	double up_result;
 	double down_result;
+	double max_pow_of_var;
+
+	bool up_has_var;
+	bool down_has_var;
+	bool down_has_result;
 }Lim;
 
 Lim lim = { 0 };
@@ -133,6 +139,16 @@ void free_node_expr(NodeExpr* expr)
 
 NodeExpr* lim_calculate_level_three(NodeExpr* exp, Lim* lim) {
 	NodeExpr* temp = exp;
+	if (lim->var_value == INT_MAX && temp->expr.value == lim->var_value)
+	{
+		temp->expr.pow -= lim->max_pow_of_var;
+		if (temp->expr.pow == 0) {
+			temp->expr.value = 1;
+		}
+		else {
+			temp->expr.value = 0;
+		}
+	}
 	exp->expr.has_open_breaks = false;
 	while (temp->expr.type != NONE && temp->expr.has_close_breaks != true) {
 		if (temp->expr.has_open_breaks == true) {
@@ -164,6 +180,16 @@ NodeExpr* lim_calculate_level_three(NodeExpr* exp, Lim* lim) {
 			continue;
 		}
 		else {
+			if (lim->var_value == INT_MAX && temp->expr.value == lim->var_value)
+			{
+				temp->expr.pow -= lim->max_pow_of_var;
+				if (temp->expr.pow == 0) {
+					temp->expr.value = 1;
+				}
+				else {
+					temp->expr.value = 0;
+				}
+			}
 			Expr expr = temp->expr;
 			temp = temp->next;
 
@@ -181,6 +207,16 @@ NodeExpr* lim_calculate_level_three(NodeExpr* exp, Lim* lim) {
 }
 
 NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim) {
+	if (lim->var_value == INT_MAX && exp->expr.value == lim->var_value)
+	{
+		exp->expr.pow -= lim->max_pow_of_var;
+		if (exp->expr.pow == 0) {
+			exp->expr.value = 1;
+		}
+		else {
+			exp->expr.value = 0;
+		}
+	}
 	while (level_of_oper(exp->expr.type) >= 2) {
 		if (exp->expr.has_open_breaks == true) {
 			NodeExpr* tmp = exp;
@@ -196,12 +232,21 @@ NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim) {
 			continue;
 		}
 		else{
+			if (lim->var_value == INT_MAX && exp->expr.value == lim->var_value)
+			{
+				exp->expr.pow -= lim->max_pow_of_var;
+				if (exp->expr.pow == 0) {
+					exp->expr.value = 1;
+				}
+				else {
+					exp->expr.value = 0;
+				}
+			}
 			Expr expr = exp->expr;
 			exp = exp->next;
 
 			if (expr.type == MULT) {
 				expr.value *= exp->expr.value;
-				printf("VALUE: %f\n", expr.value);
 			}
 			else if (expr.type == DIV) {
 				expr.value /= exp->expr.value;
@@ -216,6 +261,17 @@ NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim) {
 double lim_calculate_expressions(Lim* lim, NodeExpr* expr)
 {
 	NodeExpr* temp = expr;
+	if (lim->var_value == INT_MAX && temp->expr.value == lim->var_value)
+	{
+		temp->expr.pow -= lim->max_pow_of_var;
+		if (temp->expr.pow == 0) {
+			temp->expr.value = 1;
+		}
+		else {
+			temp->expr.value = 0;
+		}
+	}
+
 	while (temp->expr.type != NONE) {
 		if (temp->expr.has_open_breaks == true) {
 			NodeExpr* tmp = temp;
@@ -246,6 +302,17 @@ double lim_calculate_expressions(Lim* lim, NodeExpr* expr)
 			continue;
 		}
 		else {
+			if (lim->var_value == INT_MAX && temp->expr.value == lim->var_value)
+			{
+				temp->expr.pow -= lim->max_pow_of_var;
+				if (temp->expr.pow == 0) {
+					temp->expr.value = 1;
+				}
+				else {
+					temp->expr.value = 0;
+				}
+			}
+
 			Expr expr = temp->expr;
 			temp = temp->next;
 
@@ -394,7 +461,13 @@ Err check_struct_of_lim(String_t* src, Lim* lim)
 		lim->var = var;
 	}
 
-	lim->var_value = st_to_double(line);
+	if (*line.data == 'i') {
+		lim->max_pow_of_var = 1;
+		lim->var_value = INT_MAX;
+	}
+	else {
+		lim->var_value = st_to_double(line);
+	}
 
 	return  ERR_OKAY;
 }
@@ -424,6 +497,10 @@ void lim_expr(Lim* lim, String_t* expr, NodeExpr* temp) {
 
 	if (is_number(value)) {
 		temp->expr.value = st_to_double(value);
+		if (lim->var_value == INT_MAX)
+		{
+			temp->expr.value = 0;
+		}
 	}
 	else {
 		temp->expr.value = lim->var_value;
@@ -431,7 +508,12 @@ void lim_expr(Lim* lim, String_t* expr, NodeExpr* temp) {
 
 	if (expr->count > 0) {
 		temp->expr.pow = st_to_double(*expr);
-		temp->expr.value = pow(temp->expr.value, temp->expr.pow);
+		if (lim->max_pow_of_var < temp->expr.pow && temp->expr.value == INT_MAX)
+			lim->max_pow_of_var = temp->expr.pow;
+
+		if(temp->expr.value != INT_MAX)
+		   temp->expr.value = pow(temp->expr.value, temp->expr.pow);
+
 		expr->data += 1;
 		expr->count -= 1;
 	}
@@ -458,6 +540,9 @@ void lim_translate_source(String_t src, Lim* lim)
 		lim_expr(lim, &expr_line, temp);
 		up_src = st_trim(up_src);
 
+		if (temp->expr.value == INT_MAX)
+			lim->up_has_var = true;
+
 		if (*up_src.data == '+') {
 			temp->expr.type = ADD;
 			up_src.data += 1;
@@ -482,8 +567,9 @@ void lim_translate_source(String_t src, Lim* lim)
 		up_src = st_trim(up_src);
 		temp->next = (NodeExpr*)malloc(sizeof(NodeExpr));
 		temp = temp->next;
+		lim->down_has_result = true;
 	}
-
+	dump_list(up_expr);
 	temp = under_expr;
 	up_src = st_trim(src);
 	while (up_src.count > 0) {
@@ -491,6 +577,10 @@ void lim_translate_source(String_t src, Lim* lim)
 
 		lim_expr(lim, &expr_line, temp);
 		up_src = st_trim(up_src);
+
+
+		if (temp->expr.value == INT_MAX)
+			lim->down_has_var = true;
 
 		if (*up_src.data == '+') {
 			temp->expr.type = ADD;
