@@ -77,7 +77,7 @@ void lim_translate_source(String_t src, Lim* lim);
 void lim_expr(Lim* lim, String_t* expr, NodeExpr* temp);
 Err check_struct_of_lim(String_t* src, Lim* lim);
 double lim_calculate_expressions(Lim* lim, NodeExpr* expr);
-Err free_node_expr(NodeExpr* expr);
+void free_node_expr(NodeExpr* expr);
 NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim);
 NodeExpr* lim_calculate_level_three(NodeExpr* exp, Lim* lim);
 
@@ -120,7 +120,7 @@ int level_of_oper(Oper_Types type)
 	return -1;
 }
 
-Err free_node_expr(NodeExpr* expr)
+void free_node_expr(NodeExpr* expr)
 {
 	NodeExpr* temp;
 
@@ -129,36 +129,41 @@ Err free_node_expr(NodeExpr* expr)
 		expr = expr->next;
 		free(temp);
 	}
-
-	return ERR_OKAY;
 }
 
 NodeExpr* lim_calculate_level_three(NodeExpr* exp, Lim* lim) {
 	NodeExpr* temp = exp;
+	exp->expr.has_open_breaks = false;
 	while (temp->expr.type != NONE && temp->expr.has_close_breaks != true) {
 		if (temp->expr.has_open_breaks == true) {
 			NodeExpr* tmp = temp;
 			tmp = lim_calculate_level_three(temp, lim);
 			temp = tmp;
+
+			continue;
 		}
-		if (temp->next->expr.has_open_breaks == true) {
+		else if (temp->next->expr.has_open_breaks == true) {
 			NodeExpr* tmp = temp;
 			tmp->next = lim_calculate_level_three(temp->next, lim);
 			temp = tmp;
-		}
 
-		if (level_of_oper(temp->next->expr.type) == 2) {
-			NodeExpr* tmp = temp;
-			tmp->next = lim_calculate_level_two(temp->next, lim);
-			temp = tmp;
+			continue;
 		}
 		else if (level_of_oper(temp->expr.type) == 2) {
 			NodeExpr* tmp = temp;
 			tmp = lim_calculate_level_two(temp, lim);
 			temp = tmp;
-		}
 
-		if (level_of_oper(temp->next->expr.type) < 2) {
+			continue;
+		}
+		else if (level_of_oper(temp->next->expr.type) == 2 && !temp->next->expr.has_close_breaks) {
+			NodeExpr* tmp = temp;
+			tmp->next = lim_calculate_level_two(temp->next, lim);
+			temp = tmp;
+
+			continue;
+		}
+		else {
 			Expr expr = temp->expr;
 			temp = temp->next;
 
@@ -168,27 +173,35 @@ NodeExpr* lim_calculate_level_three(NodeExpr* exp, Lim* lim) {
 			else if (expr.type == MINUS) {
 				expr.value -= temp->expr.value;
 			}
-
 			temp->expr.value = expr.value;
 		}
 	}
-
+	temp->expr.has_close_breaks = false;
 	return temp;
 }
 
 NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim) {
 	while (level_of_oper(exp->expr.type) >= 2) {
-		if (level_of_oper(exp->next->expr.type) > 2) {
+		if (exp->expr.has_open_breaks == true) {
 			NodeExpr* tmp = exp;
-			tmp->next = lim_calculate_level_three(exp, lim);
+			tmp = lim_calculate_level_three(exp, lim);
 			exp = tmp;
+
+			continue;
 		}
-		else {
+		else if (exp->next->expr.has_open_breaks == true) {
+			NodeExpr* tmp = exp;
+			tmp->next = lim_calculate_level_three(exp->next, lim);
+			exp = tmp;
+			continue;
+		}
+		else{
 			Expr expr = exp->expr;
 			exp = exp->next;
 
 			if (expr.type == MULT) {
 				expr.value *= exp->expr.value;
+				printf("VALUE: %f\n", expr.value);
 			}
 			else if (expr.type == DIV) {
 				expr.value /= exp->expr.value;
@@ -204,7 +217,21 @@ double lim_calculate_expressions(Lim* lim, NodeExpr* expr)
 {
 	NodeExpr* temp = expr;
 	while (temp->expr.type != NONE) {
-		if (level_of_oper(temp->expr.type) == 2) {
+		if (temp->expr.has_open_breaks == true) {
+			NodeExpr* tmp = temp;
+			tmp = lim_calculate_level_three(temp, lim);
+			temp = tmp;
+
+			continue;
+		}
+		else if (temp->next->expr.has_open_breaks == true) {
+			NodeExpr* tmp = temp;
+			tmp->next = lim_calculate_level_three(temp->next, lim);
+			temp = tmp;
+
+			continue;
+		}
+		else if (level_of_oper(temp->expr.type) == 2) {
 			NodeExpr* tmp = temp;
 			tmp = lim_calculate_level_two(temp, lim);
 			temp = tmp;
@@ -374,7 +401,7 @@ Err check_struct_of_lim(String_t* src, Lim* lim)
 
 void dump_list(NodeExpr* expr) {
 	NodeExpr* temp = expr;
-	while (temp->expr.type != NONE) {
+	while (temp != NULL && temp->expr.value != 0) {
 		printf("Value: %f  Type: %d\n", temp->expr.value, level_of_oper(temp->expr.type));
 		temp = temp->next;
 	}
@@ -382,6 +409,17 @@ void dump_list(NodeExpr* expr) {
 
 void lim_expr(Lim* lim, String_t* expr, NodeExpr* temp) {
 	temp->expr = (Expr){ .value = 0,.type = NONE ,.has_close_breaks = false,.has_open_breaks = false, .pow = 1 };
+
+	if (*expr->data == '(') {
+		temp->expr.has_open_breaks = true;
+		expr->data += 1;
+		expr->count -= 1;
+	}
+	else if (expr->data[expr->count - 1] == ')') {
+		temp->expr.has_close_breaks = true;
+		expr->count -= 1;
+	}
+
 	String_t value = st_trim(chop_by_delim(expr, '^'));
 
 	if (is_number(value)) {
@@ -442,7 +480,6 @@ void lim_translate_source(String_t src, Lim* lim)
 		}
 
 		up_src = st_trim(up_src);
-
 		temp->next = (NodeExpr*)malloc(sizeof(NodeExpr));
 		temp = temp->next;
 	}
