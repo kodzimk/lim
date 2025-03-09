@@ -1,11 +1,11 @@
-# About
-Library which work basic and medium limit's operations.
+<div align="center">
+<pre>
+LIM
+---------------------------------------------------
+python cli program to send requests
+</pre>
 
-# Examples
-lim n-> 0: n
-lim n-> 0: n + 1 * (n * 2)
-lim n-> 1: n + 2 * 5 + (2 + 2) | 2 * 2^2
+[![PyPI](https://img.shields.io/pypi/v/quaeso.svg)](https://pypi.org/project/quaeso/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# Build 
-git clone (link of project)
-make
+</div>
