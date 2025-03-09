@@ -1,4 +1,4 @@
-﻿#ifndef LIM_H
+﻿﻿#ifndef LIM_H
 #define LIM_H
 
 #include<stdint.h>
@@ -27,7 +27,6 @@ typedef enum {
 	ERR_INVALID_STRUCT_OF_LIM,
 	ERR_OKAY,
 }Err;
-
 
 typedef struct {
 	const char* data;
@@ -231,7 +230,7 @@ NodeExpr* lim_calculate_level_two(NodeExpr* exp, Lim* lim) {
 			exp = tmp;
 			continue;
 		}
-		else{
+		else {
 			if (lim->var_value == INT_MAX && exp->expr.value == lim->var_value)
 			{
 				exp->expr.pow -= lim->max_pow_of_var;
@@ -326,7 +325,6 @@ double lim_calculate_expressions(Lim* lim, NodeExpr* expr)
 		}
 	}
 
-	printf("TEMP: %f\n", temp->expr.value);
 	return temp->expr.value;
 }
 
@@ -511,8 +509,8 @@ void lim_expr(Lim* lim, String_t* expr, NodeExpr* temp) {
 		if (lim->max_pow_of_var < temp->expr.pow && temp->expr.value == INT_MAX)
 			lim->max_pow_of_var = temp->expr.pow;
 
-		if(temp->expr.value != INT_MAX)
-		   temp->expr.value = pow(temp->expr.value, temp->expr.pow);
+		if (temp->expr.value != INT_MAX)
+			temp->expr.value = pow(temp->expr.value, temp->expr.pow);
 
 		expr->data += 1;
 		expr->count -= 1;
@@ -531,7 +529,6 @@ void lim_translate_source(String_t src, Lim* lim)
 	NodeExpr* up_expr = (NodeExpr*)malloc(sizeof(NodeExpr));
 	NodeExpr* under_expr = (NodeExpr*)malloc(sizeof(NodeExpr));
 	NodeExpr* temp = up_expr;
-
 	String_t up_src = st_trim(chop_by_delim(&src, '|'));
 
 	while (up_src.count > 0) {
@@ -569,7 +566,7 @@ void lim_translate_source(String_t src, Lim* lim)
 		temp = temp->next;
 		lim->down_has_result = true;
 	}
-	dump_list(up_expr);
+
 	temp = under_expr;
 	up_src = st_trim(src);
 	while (up_src.count > 0) {
@@ -577,7 +574,6 @@ void lim_translate_source(String_t src, Lim* lim)
 
 		lim_expr(lim, &expr_line, temp);
 		up_src = st_trim(up_src);
-
 
 		if (temp->expr.value == INT_MAX)
 			lim->down_has_var = true;
@@ -604,7 +600,6 @@ void lim_translate_source(String_t src, Lim* lim)
 		}
 
 		up_src = st_trim(up_src);
-
 		temp->next = (NodeExpr*)malloc(sizeof(NodeExpr));
 		temp = temp->next;
 	}
